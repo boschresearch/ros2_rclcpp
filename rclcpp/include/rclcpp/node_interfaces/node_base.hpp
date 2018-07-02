@@ -85,7 +85,10 @@ public:
   RCLCPP_PUBLIC
   virtual
   rclcpp::callback_group::CallbackGroup::SharedPtr
-  create_callback_group(rclcpp::callback_group::CallbackGroupType group_type);
+  create_callback_group(
+    rclcpp::callback_group::CallbackGroupType group_type,
+    rclcpp::callback_group::RealTimeClass real_time_class =
+    rclcpp::callback_group::RealTimeClass::BestEffort);
 
   RCLCPP_PUBLIC
   virtual
@@ -101,11 +104,6 @@ public:
   virtual
   const std::vector<rclcpp::callback_group::CallbackGroup::WeakPtr> &
   get_callback_groups() const;
-
-  RCLCPP_PUBLIC
-  virtual
-  std::atomic_bool &
-  get_associated_with_executor_atomic();
 
   RCLCPP_PUBLIC
   virtual
@@ -126,8 +124,6 @@ private:
 
   rclcpp::callback_group::CallbackGroup::SharedPtr default_callback_group_;
   std::vector<rclcpp::callback_group::CallbackGroup::WeakPtr> callback_groups_;
-
-  std::atomic_bool associated_with_executor_;
 
   /// Guard condition for notifying the Executor of changes to this node.
   mutable std::recursive_mutex notify_guard_condition_mutex_;

@@ -133,51 +133,50 @@ public:
     );
   }
 
-  bool collect_entities(const WeakNodeVector & weak_nodes)
+  bool collect_entities(const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
   {
-    bool has_invalid_weak_nodes = false;
-    for (auto & weak_node : weak_nodes) {
-      auto node = weak_node.lock();
-      if (!node) {
-        has_invalid_weak_nodes = true;
+    bool has_invalid_weak_groups_or_nodes = false;
+    for (const auto & pair : weak_groups_to_nodes) {
+      auto group = pair.first.lock();
+      auto node = pair.second.lock();
+      if (group == nullptr || node == nullptr) {
+        has_invalid_weak_groups_or_nodes = true;
         continue;
       }
-      for (auto & weak_group : node->get_callback_groups()) {
-        auto group = weak_group.lock();
-        if (!group || !group->can_be_taken_from().load()) {
-          continue;
-        }
-        for (auto & weak_subscription : group->get_subscription_ptrs()) {
-          auto subscription = weak_subscription.lock();
-          if (subscription) {
-            subscription_handles_.push_back(subscription->get_subscription_handle());
-            if (subscription->get_intra_process_subscription_handle()) {
-              subscription_handles_.push_back(
-                subscription->get_intra_process_subscription_handle());
-            }
+      if (!group->can_be_taken_from().load()) {
+        continue;
+      }
+      for (auto & weak_subscription : group->get_subscription_ptrs()) {
+        auto subscription = weak_subscription.lock();
+        if (subscription) {
+          subscription_handles_.push_back(subscription->get_subscription_handle());
+          if (subscription->get_intra_process_subscription_handle()) {
+            subscription_handles_.push_back(
+              subscription->get_intra_process_subscription_handle());
           }
         }
-        for (auto & weak_service : group->get_service_ptrs()) {
-          auto service = weak_service.lock();
-          if (service) {
-            service_handles_.push_back(service->get_service_handle());
-          }
+      }
+      for (auto & weak_service : group->get_service_ptrs()) {
+        auto service = weak_service.lock();
+        if (service) {
+          service_handles_.push_back(service->get_service_handle());
         }
-        for (auto & weak_client : group->get_client_ptrs()) {
-          auto client = weak_client.lock();
-          if (client) {
-            client_handles_.push_back(client->get_client_handle());
-          }
+      }
+      for (auto & weak_client : group->get_client_ptrs()) {
+        auto client = weak_client.lock();
+        if (client) {
+          client_handles_.push_back(client->get_client_handle());
         }
-        for (auto & weak_timer : group->get_timer_ptrs()) {
-          auto timer = weak_timer.lock();
-          if (timer) {
-            timer_handles_.push_back(timer->get_timer_handle());
-          }
+      }
+      for (auto & weak_timer : group->get_timer_ptrs()) {
+        auto timer = weak_timer.lock();
+        if (timer) {
+          timer_handles_.push_back(timer->get_timer_handle());
         }
       }
     }
-    return has_invalid_weak_nodes;
+
+    return has_invalid_weak_groups_or_nodes;
   }
 
   bool add_handles_to_wait_set(rcl_wait_set_t * wait_set)
@@ -233,11 +232,11 @@ public:
   virtual void
   get_next_subscription(
     executor::AnyExecutable & any_exec,
-    const WeakNodeVector & weak_nodes)
+    const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
   {
     auto it = subscription_handles_.begin();
     while (it != subscription_handles_.end()) {
-      auto subscription = get_subscription_by_handle(*it, weak_nodes);
+      auto subscription = get_subscription_by_handle(*it, weak_groups_to_nodes);
       if (subscription) {
         // Figure out if this is for intra-process or not.
         bool is_intra_process = false;
@@ -245,7 +244,7 @@ public:
           is_intra_process = subscription->get_intra_process_subscription_handle() == *it;
         }
         // Find the group for this handle and see if it can be serviced
-        auto group = get_group_by_subscription(subscription, weak_nodes);
+        auto group = get_group_by_subscription(subscription, weak_groups_to_nodes);
         if (!group) {
           // Group was not found, meaning the subscription is not valid...
           // Remove it from the ready list and continue looking
@@ -265,7 +264,7 @@ public:
           any_exec.subscription = subscription;
         }
         any_exec.callback_group = group;
-        any_exec.node_base = get_node_by_group(group, weak_nodes);
+        any_exec.node_base = get_node_by_group(group, weak_groups_to_nodes);
         subscription_handles_.erase(it);
         return;
       }
@@ -277,14 +276,14 @@ public:
   virtual void
   get_next_service(
     executor::AnyExecutable & any_exec,
-    const WeakNodeVector & weak_nodes)
+    const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
   {
     auto it = service_handles_.begin();
     while (it != service_handles_.end()) {
-      auto service = get_service_by_handle(*it, weak_nodes);
+      auto service = get_service_by_handle(*it, weak_groups_to_nodes);
       if (service) {
         // Find the group for this handle and see if it can be serviced
-        auto group = get_group_by_service(service, weak_nodes);
+        auto group = get_group_by_service(service, weak_groups_to_nodes);
         if (!group) {
           // Group was not found, meaning the service is not valid...
           // Remove it from the ready list and continue looking
@@ -300,7 +299,7 @@ public:
         // Otherwise it is safe to set and return the any_exec
         any_exec.service = service;
         any_exec.callback_group = group;
-        any_exec.node_base = get_node_by_group(group, weak_nodes);
+        any_exec.node_base = get_node_by_group(group, weak_groups_to_nodes);
         service_handles_.erase(it);
         return;
       }
@@ -310,14 +309,16 @@ public:
   }
 
   virtual void
-  get_next_client(executor::AnyExecutable & any_exec, const WeakNodeVector & weak_nodes)
+  get_next_client(
+    executor::AnyExecutable & any_exec,
+    const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
   {
     auto it = client_handles_.begin();
     while (it != client_handles_.end()) {
-      auto client = get_client_by_handle(*it, weak_nodes);
+      auto client = get_client_by_handle(*it, weak_groups_to_nodes);
       if (client) {
         // Find the group for this handle and see if it can be serviced
-        auto group = get_group_by_client(client, weak_nodes);
+        auto group = get_group_by_client(client, weak_groups_to_nodes);
         if (!group) {
           // Group was not found, meaning the service is not valid...
           // Remove it from the ready list and continue looking
@@ -333,7 +334,7 @@ public:
         // Otherwise it is safe to set and return the any_exec
         any_exec.client = client;
         any_exec.callback_group = group;
-        any_exec.node_base = get_node_by_group(group, weak_nodes);
+        any_exec.node_base = get_node_by_group(group, weak_groups_to_nodes);
         client_handles_.erase(it);
         return;
       }

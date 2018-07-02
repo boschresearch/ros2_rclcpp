@@ -20,27 +20,21 @@ using rclcpp::memory_strategy::MemoryStrategy;
 rclcpp::SubscriptionBase::SharedPtr
 MemoryStrategy::get_subscription_by_handle(
   std::shared_ptr<const rcl_subscription_t> subscriber_handle,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
+  for (const auto & pair : weak_groups_to_nodes) {
+    auto group = pair.first.lock();
+    if (!group) {
       continue;
     }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto group = weak_group.lock();
-      if (!group) {
-        continue;
-      }
-      for (auto & weak_subscription : group->get_subscription_ptrs()) {
-        auto subscription = weak_subscription.lock();
-        if (subscription) {
-          if (subscription->get_subscription_handle() == subscriber_handle) {
-            return subscription;
-          }
-          if (subscription->get_intra_process_subscription_handle() == subscriber_handle) {
-            return subscription;
-          }
+    for (auto & weak_subscription : group->get_subscription_ptrs()) {
+      auto subscription = weak_subscription.lock();
+      if (subscription) {
+        if (subscription->get_subscription_handle() == subscriber_handle) {
+          return subscription;
+        }
+        if (subscription->get_intra_process_subscription_handle() == subscriber_handle) {
+          return subscription;
         }
       }
     }
@@ -51,23 +45,17 @@ MemoryStrategy::get_subscription_by_handle(
 rclcpp::ServiceBase::SharedPtr
 MemoryStrategy::get_service_by_handle(
   std::shared_ptr<const rcl_service_t> service_handle,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
+  for (const auto & pair : weak_groups_to_nodes) {
+    auto group = pair.first.lock();
+    if (!group) {
       continue;
     }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto group = weak_group.lock();
-      if (!group) {
-        continue;
-      }
-      for (auto & weak_service : group->get_service_ptrs()) {
-        auto service = weak_service.lock();
-        if (service && service->get_service_handle() == service_handle) {
-          return service;
-        }
+    for (auto & weak_service : group->get_service_ptrs()) {
+      auto service = weak_service.lock();
+      if (service && service->get_service_handle() == service_handle) {
+        return service;
       }
     }
   }
@@ -77,23 +65,17 @@ MemoryStrategy::get_service_by_handle(
 rclcpp::ClientBase::SharedPtr
 MemoryStrategy::get_client_by_handle(
   std::shared_ptr<const rcl_client_t> client_handle,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
+  for (const auto & pair : weak_groups_to_nodes) {
+    auto group = pair.first.lock();
+    if (!group) {
       continue;
     }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto group = weak_group.lock();
-      if (!group) {
-        continue;
-      }
-      for (auto & weak_client : group->get_client_ptrs()) {
-        auto client = weak_client.lock();
-        if (client && client->get_client_handle() == client_handle) {
-          return client;
-        }
+    for (auto & weak_client : group->get_client_ptrs()) {
+      auto client = weak_client.lock();
+      if (client && client->get_client_handle() == client_handle) {
+        return client;
       }
     }
   }
@@ -103,22 +85,17 @@ MemoryStrategy::get_client_by_handle(
 rclcpp::node_interfaces::NodeBaseInterface::SharedPtr
 MemoryStrategy::get_node_by_group(
   rclcpp::callback_group::CallbackGroup::SharedPtr group,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
   if (!group) {
     return nullptr;
   }
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
-      continue;
-    }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto callback_group = weak_group.lock();
-      if (callback_group == group) {
-        return node;
-      }
-    }
+
+  rclcpp::callback_group::CallbackGroup::WeakPtr weak_group_ptr(group);
+  const auto finder = weak_groups_to_nodes.find(weak_group_ptr);
+  if (finder != weak_groups_to_nodes.end()) {
+    rclcpp::node_interfaces::NodeBaseInterface::SharedPtr node_ptr = finder->second.lock();
+    return node_ptr;
   }
   return nullptr;
 }
@@ -126,23 +103,17 @@ MemoryStrategy::get_node_by_group(
 rclcpp::callback_group::CallbackGroup::SharedPtr
 MemoryStrategy::get_group_by_subscription(
   rclcpp::SubscriptionBase::SharedPtr subscription,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
+  for (const auto & pair : weak_groups_to_nodes) {
+    auto group = pair.first.lock();
+    if (!group) {
       continue;
     }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto group = weak_group.lock();
-      if (!group) {
-        continue;
-      }
-      for (auto & weak_sub : group->get_subscription_ptrs()) {
-        auto sub = weak_sub.lock();
-        if (sub == subscription) {
-          return group;
-        }
+    for (auto & weak_sub : group->get_subscription_ptrs()) {
+      auto sub = weak_sub.lock();
+      if (sub == subscription) {
+        return group;
       }
     }
   }
@@ -152,23 +123,17 @@ MemoryStrategy::get_group_by_subscription(
 rclcpp::callback_group::CallbackGroup::SharedPtr
 MemoryStrategy::get_group_by_service(
   rclcpp::ServiceBase::SharedPtr service,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
+  for (const auto & pair : weak_groups_to_nodes) {
+    auto group = pair.first.lock();
+    if (!group) {
       continue;
     }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto group = weak_group.lock();
-      if (!group) {
-        continue;
-      }
-      for (auto & weak_serv : group->get_service_ptrs()) {
-        auto serv = weak_serv.lock();
-        if (serv && serv == service) {
-          return group;
-        }
+    for (auto & weak_serv : group->get_service_ptrs()) {
+      auto serv = weak_serv.lock();
+      if (serv && serv == service) {
+        return group;
       }
     }
   }
@@ -178,23 +143,17 @@ MemoryStrategy::get_group_by_service(
 rclcpp::callback_group::CallbackGroup::SharedPtr
 MemoryStrategy::get_group_by_client(
   rclcpp::ClientBase::SharedPtr client,
-  const WeakNodeVector & weak_nodes)
+  const WeakCallbackGroupsToNodesMap & weak_groups_to_nodes)
 {
-  for (auto & weak_node : weak_nodes) {
-    auto node = weak_node.lock();
-    if (!node) {
+  for (const auto & pair : weak_groups_to_nodes) {
+    auto group = pair.first.lock();
+    if (!group) {
       continue;
     }
-    for (auto & weak_group : node->get_callback_groups()) {
-      auto group = weak_group.lock();
-      if (!group) {
-        continue;
-      }
-      for (auto & weak_client : group->get_client_ptrs()) {
-        auto cli = weak_client.lock();
-        if (cli && cli == client) {
-          return group;
-        }
+    for (auto & weak_client : group->get_client_ptrs()) {
+      auto cli = weak_client.lock();
+      if (cli && cli == client) {
+        return group;
       }
     }
   }
