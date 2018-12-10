@@ -18,9 +18,11 @@
 
 using rclcpp::callback_group::CallbackGroup;
 using rclcpp::callback_group::CallbackGroupType;
+using rclcpp::callback_group::RealTimeClass;
 
-CallbackGroup::CallbackGroup(CallbackGroupType group_type)
-: type_(group_type), can_be_taken_from_(true)
+CallbackGroup::CallbackGroup(CallbackGroupType group_type, RealTimeClass real_time_class)
+: type_(group_type), real_time_class_(real_time_class), associated_with_executor_(false),
+  can_be_taken_from_(true)
 {}
 
 const std::vector<rclcpp::SubscriptionBase::WeakPtr> &
@@ -68,6 +70,18 @@ const CallbackGroupType &
 CallbackGroup::type() const
 {
   return type_;
+}
+
+const RealTimeClass &
+CallbackGroup::real_time_class() const
+{
+  return real_time_class_;
+}
+
+std::atomic_bool &
+CallbackGroup::get_associated_with_executor_atomic()
+{
+  return associated_with_executor_;
 }
 
 void

@@ -111,9 +111,10 @@ Node::get_logger() const
 
 rclcpp::callback_group::CallbackGroup::SharedPtr
 Node::create_callback_group(
-  rclcpp::callback_group::CallbackGroupType group_type)
+  rclcpp::callback_group::CallbackGroupType group_type,
+  rclcpp::callback_group::RealTimeClass real_time_class)
 {
-  return node_base_->create_callback_group(group_type);
+  return node_base_->create_callback_group(group_type, real_time_class);
 }
 
 bool

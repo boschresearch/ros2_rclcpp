@@ -48,6 +48,13 @@ enum class CallbackGroupType
   Reentrant
 };
 
+enum class RealTimeClass
+{
+  RealTimeCritical,
+  SoftRealTime,
+  BestEffort
+};
+
 class CallbackGroup
 {
   friend class rclcpp::node_interfaces::NodeServices;
@@ -59,7 +66,9 @@ public:
   RCLCPP_SMART_PTR_DEFINITIONS(CallbackGroup)
 
   RCLCPP_PUBLIC
-  explicit CallbackGroup(CallbackGroupType group_type);
+  explicit CallbackGroup(
+    CallbackGroupType group_type,
+    RealTimeClass real_time_class = RealTimeClass::BestEffort);
 
   RCLCPP_PUBLIC
   const std::vector<rclcpp::SubscriptionBase::WeakPtr> &
@@ -89,6 +98,14 @@ public:
   const CallbackGroupType &
   type() const;
 
+  RCLCPP_PUBLIC
+  const RealTimeClass &
+  real_time_class() const;
+
+  RCLCPP_PUBLIC
+  std::atomic_bool &
+  get_associated_with_executor_atomic();
+
 protected:
   RCLCPP_DISABLE_COPY(CallbackGroup)
 
@@ -117,8 +134,10 @@ protected:
   remove_waitable(const rclcpp::Waitable::SharedPtr waitable_ptr) noexcept;
 
   CallbackGroupType type_;
+  RealTimeClass real_time_class_;
   // Mutex to protect the subsequent vectors of pointers.
   mutable std::mutex mutex_;
+  std::atomic_bool associated_with_executor_;
   std::vector<rclcpp::SubscriptionBase::WeakPtr> subscription_ptrs_;
   std::vector<rclcpp::TimerBase::WeakPtr> timer_ptrs_;
   std::vector<rclcpp::ServiceBase::WeakPtr> service_ptrs_;
